@@ -1,0 +1,36 @@
+# Render Blueprint — see DEPLOYMENT.md for the full walkthrough.
+#
+# This defines one web service running the Next.js app with a persistent
+# disk mounted for the SQLite database and uploaded module files (both are
+# configured to live under the same disk via DATABASE_PATH / UPLOAD_DIR,
+# since a Render service can only mount one disk).
+#
+# To use: push this repo to GitHub, then in the Render dashboard choose
+# "New +" -> "Blueprint" and point it at the repo. Render reads this file
+# and provisions the service automatically. AUTH_SECRET is marked
+# generateValue so Render creates a strong random secret for you — you
+# don't need to supply one.
+
+services:
+  - type: web
+    name: skillsacademy
+    runtime: node
+    plan: starter
+    region: oregon
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: DATABASE_PATH
+        value: /var/data/skillsacademy.db
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+    disk:
+      name: skillsacademy-data
+      mountPath: /var/data
+      sizeGB: 1

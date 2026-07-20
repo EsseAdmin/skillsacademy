@@ -1,0 +1,17 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# Netlify Database (managed Postgres, provisioned via `netlify db init` or the
+# dashboard) injects NETLIFY_DB_URL automatically at runtime — src/lib/db.ts
+# picks it up through @netlify/database's getConnectionString(). No manual
+# DATABASE_URL is needed once the database is linked to the site.
+#
+# Netlify Blobs needs no configuration at all — src/lib/storage.ts calls
+# getStore() which resolves automatically from the deploy context.
+
+[build.environment]
+  NODE_VERSION = "22"
