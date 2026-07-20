@@ -13,11 +13,11 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@netlify/blobs": "^10.7.9",
+    "@netlify/blobs": "^10.1.0",
     "@netlify/database": "^1.1.0",
     "bcryptjs": "^3.0.3",
     "jose": "^6.2.3",
-    "next": "16.2.10",
+    "next": "^9.3.3",
     "pg": "^8.22.0",
     "react": "19.2.4",
     "react-dom": "19.2.4"
@@ -39,8 +39,9 @@
   },
   "allowScripts": {
     "esbuild@0.28.1": true,
-    "fsevents@2.3.3": true,
     "sharp@0.34.5": true,
-    "unrs-resolver@1.12.2": true
+    "unrs-resolver@1.12.2": true,
+    "es5-ext@0.10.64": true,
+    "fsevents@1.2.13": true
   }
 }
