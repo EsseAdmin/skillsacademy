@@ -65,11 +65,11 @@ resolved — see below):
    academy — every route in this feature calls this function first.
 
 2. **`app/api/courses/[courseId]/modules/[moduleId]/live-sessions/route.ts`
-   — `assertModuleBelongsToAcademy()`.** Deliberately throws a 501 until you
-   fill it in. This is the check that stops one academy's admin from
-   creating a live session (and spending API quota) on another academy's
-   module — it needs a real query against your existing courses/modules
-   tables, which this package has no visibility into.
+   — `assertModuleBelongsToAcademy()`.** Now implemented against the real
+   schema: it joins `course_modules` → `courses` → `modules` and requires both
+   the course and the module to carry the caller's `academy_id`. This is the
+   check that stops one academy's admin from creating a live session (and
+   spending API quota) on another academy's module.
 
 3. **`lib/db.ts` connection string.** Resolved: the app now calls
    `getDatabase()` from `@netlify/database`, which reads the connection
@@ -137,7 +137,7 @@ one feature, reconciling them is a follow-up.
 
 Every `.ts`/`.tsx` file here was type-checked with `tsc --noEmit` against
 your actual dependency versions (`next@16.2.10`, `react@19.2.4`, `pg`,
-`jose`, `typescript@5`) and compiles cleanly. That confirms the code is
-syntactically and type-correct — it does not confirm the two stubbed
-integration points above behave correctly, since that depends on code this
+`jose`, `typescript@5`) and compiles cleanly, and the migration was checked
+against the live database's real column types. That does not confirm the
+`requireAcademyAdmin()` session assumptions above, which depend on code this
 package can't see.

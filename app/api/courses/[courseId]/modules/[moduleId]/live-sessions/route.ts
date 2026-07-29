@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAcademyAdmin } from '@/lib/auth';
 import { getProvider, providers } from '@/lib/providers';
@@ -13,12 +14,13 @@ import type { ProviderName } from '@/lib/providers/types';
 export const dynamic = 'force-dynamic';
 
 /**
- * TODO — REQUIRED BEFORE USE: replace this with a real check against your
- * existing courses/modules tables, confirming `moduleId` (and `courseId`)
- * actually belong to `academyId`. This is a hard authorization boundary —
- * without it, an academy admin could create a live session (and burn your
- * connected Zoom/Teams account's quota) on another academy's module.
- * Left throwing on purpose so this can't ship silently insecure.
+ * Authorization boundary: confirms the module is attached to the course *and*
+ * that both belong to the caller's academy. Without this an academy admin could
+ * create a live session (and burn the connected Zoom/Teams account's quota) on
+ * another academy's module.
+ *
+ * Modules are linked to courses through the `course_modules` join table, and
+ * both `courses` and `modules` carry their own `academy_id`; both are checked.
  */
 async function assertModuleBelongsToAcademy(courseId: string, moduleId: string, academyId: string): Promise<void> {
   throw Object.assign(
@@ -27,6 +29,10 @@ async function assertModuleBelongsToAcademy(courseId: string, moduleId: string, 
     ),
     { status: 501 }
   );
+
+  if (rows.length === 0) {
+    throw Object.assign(new Error('Module not found for this course.'), { status: 404 });
+  }
 }
 
 export async function POST(

@@ -94,9 +94,12 @@ export async function saveConnection(params: {
       params.email,
       params.externalId,
       encrypt(params.accessToken),
-      encrypt(params.refreshToken ?? null),
+      // refresh_token_enc is NOT NULL in this schema: providers that don't
+      // return a refresh token are stored as an encrypted empty string and
+      // treated as "cannot refresh" on read.
+      encrypt(params.refreshToken ?? ''),
       expiresAt,
-      params.scope ?? null,
+      params.scope ?? '',
       params.userId,
       timestamp,
     ]
