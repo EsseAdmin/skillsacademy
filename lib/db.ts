@@ -1,37 +1,33 @@
-import { Pool } from 'pg';
+import { getDatabase, type DatabaseConnection } from '@netlify/database';
+import type { Pool, QueryResultRow } from 'pg';
 
-// Reuses the same Postgres connection your app already has via @netlify/database.
-// CHECK: confirm the env var name Netlify DB actually injects for your project
-// (commonly NETLIFY_DATABASE_URL for the @netlify/database extension; falling
-// back to DATABASE_URL covers a plain Postgres/Neon connection string too).
-const connectionString = process.env.NETLIFY_DATABASE_URL || process.env.DATABASE_URL;
+// Netlify Database (managed Postgres) resolves its own connection string from
+// the environment, so there is nothing to configure here.
+//
+// Nothing in this module may run at import time. `next build` imports every
+// route module during its "Collecting page data" step, and the database
+// credentials are only injected at request time — so connecting (or even
+// asserting that a connection string exists) at module scope fails the build.
+// Everything below is therefore resolved lazily, on first query.
+let connection: DatabaseConnection | undefined;
 
-if (!connectionString) {
-  throw new Error(
-    'No database connection string found. Expected NETLIFY_DATABASE_URL or DATABASE_URL to be set — ' +
-      'check what your existing @netlify/database / pg usage elsewhere in this app relies on and reuse the same pool if one already exists.'
-  );
+function getConnection(): DatabaseConnection {
+  connection ??= getDatabase();
+  return connection;
 }
 
-// If the app already exports a shared pg Pool elsewhere (likely, given `pg`
-// is already a dependency), prefer importing that instead of creating a
-// second pool here — this is written standalone only because this file
-// doesn't have visibility into the rest of the codebase.
-let pool: Pool;
-
-declare global {
-  // eslint-disable-next-line no-var
-  var __zoomTeamsPgPool: Pool | undefined;
+/**
+ * Runs a parameterised SQL query against Netlify Database.
+ * The connection is opened on first use and reused afterwards.
+ */
+export async function query<T extends QueryResultRow = QueryResultRow>(
+  text: string,
+  params?: unknown[]
+): Promise<{ rows: T[]; rowCount: number | null }> {
+  // Netlify Database hands back either the node-postgres pool or the Neon
+  // serverless pool depending on the runtime; both expose the same
+  // `query(text, params)` contract, so we narrow to the shared one.
+  const pool = getConnection().pool as unknown as Pool;
+  const result = await pool.query<T>(text, params as unknown[]);
+  return { rows: result.rows, rowCount: result.rowCount };
 }
-
-if (process.env.NODE_ENV === 'production') {
-  pool = new Pool({ connectionString });
-} else {
-  // avoid exhausting connections from hot-reload in dev
-  if (!global.__zoomTeamsPgPool) {
-    global.__zoomTeamsPgPool = new Pool({ connectionString });
-  }
-  pool = global.__zoomTeamsPgPool;
-}
-
-export default pool;

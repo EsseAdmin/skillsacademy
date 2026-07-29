@@ -2,6 +2,9 @@ import { requireAcademyAdmin } from '@/lib/auth';
 import { listIntegrations } from '@/lib/integrationsService';
 import IntegrationsClient from './IntegrationsClient';
 
+// Reads the admin's session cookie and the database on every request.
+export const dynamic = 'force-dynamic';
+
 // Adjust the import path above (@/lib/...) if this app's tsconfig path
 // alias differs — check tsconfig.json's "paths" entry.
 

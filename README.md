@@ -38,8 +38,7 @@ lib/providers/types.ts
 lib/providers/zoom.ts
 lib/providers/teams.ts
 lib/providers/index.ts
-db/schema.sql
-scripts/migrate-zoom-teams.mjs
+netlify/database/migrations/20260729120000_add-live-sessions-and-oauth-states.sql
 ```
 
 If your repo already has a `lib/db.ts` (very likely, given `pg` is already a
@@ -47,17 +46,17 @@ dependency), **don't add a second one** — instead delete the one in this
 package and update the imports in `lib/integrationsService.ts` to import
 your existing pool/client instead.
 
-Before running or deploying, apply the schema:
+The schema is applied for you. Netlify runs every migration in
+`netlify/database/migrations/` automatically as part of the deploy, so there
+is no migration command to run by hand — and you should not run one, since
+doing so would put the migration ledger out of step with the platform.
 
-```
-node scripts/migrate-zoom-teams.mjs
-```
+## Two things that need your input before this actually works
 
-## Three things that need your input before this actually works
-
-This was written without access to your codebase, so three integration
+This was written without access to your codebase, so two integration
 points are stubbed with clearly marked assumptions rather than guesses
-dressed up as working code:
+dressed up as working code (a third, the database connection, is now
+resolved — see below):
 
 1. **`lib/auth.ts` — `requireAcademyAdmin()`.** Guessed at a `session`
    cookie holding a `jose`-signed JWT with `academyId`/`role` claims, based
@@ -72,10 +71,22 @@ dressed up as working code:
    module — it needs a real query against your existing courses/modules
    tables, which this package has no visibility into.
 
-3. **`lib/db.ts` connection string.** Set to try `NETLIFY_DATABASE_URL` then
-   `DATABASE_URL`. Confirm which one your `@netlify/database` setup actually
-   uses (check your Netlify environment variables or wherever your existing
-   `pg` usage reads its connection string from) and align this.
+3. **`lib/db.ts` connection string.** Resolved: the app now calls
+   `getDatabase()` from `@netlify/database`, which reads the connection
+   details Netlify injects at request time. There is no connection string to
+   configure, and — importantly — nothing connects at module load, which is
+   what previously failed the build.
+
+## Database connection
+
+`lib/db.ts` exposes a single `query()` helper over Netlify Database. The
+connection is opened lazily on the first query, never at import time: `next
+build` imports every route module while collecting page data, and the
+database credentials only exist at request time, so touching the database at
+module scope fails the build.
+
+Every database-backed route (and the admin page) is marked
+`export const dynamic = 'force-dynamic'` for the same reason.
 
 ## Environment variables to add
 
@@ -102,14 +113,25 @@ multi-tenant Microsoft Entra ID app registration with
 Zoom and Microsoft admin accounts — see the earlier README I sent for the
 exact steps; they're unchanged by this rewrite.
 
-## Data model (`db/schema.sql`)
+## Data model (`netlify/database/migrations/`)
 
-Three new, additive tables — `academy_integrations` (encrypted tokens per
-academy+provider), `live_sessions` (one row per scheduled meeting), and
-`oauth_states` (short-lived CSRF state for the OAuth redirect round-trip).
-`live_sessions.course_id`/`module_id` are plain integers with no foreign key
-to your real tables, since this package doesn't know their actual column
-types — fix those types and add the FK once you wire this in for real.
+`academy_integrations` (encrypted tokens per academy+provider) already existed
+in the database, so the migration only adds the `status` column this feature
+needs and relaxes three `NOT NULL` constraints that a provider returning no
+refresh token or scope would otherwise violate. `live_sessions` (one row per
+scheduled meeting) and `oauth_states` (short-lived CSRF state for the OAuth
+redirect round-trip) are created new.
+
+All of it follows the conventions already in this database rather than the
+ones originally guessed here: primary keys are application-generated TEXT
+UUIDs, and timestamps are ISO-8601 TEXT. `live_sessions.course_id` /
+`module_id` are TEXT to match `courses.id` / `modules.id`, but carry no
+foreign key yet — add those once `assertModuleBelongsToAcademy()` is wired up.
+
+Note that `modules` already carries `live_provider` / `live_join_url` /
+`live_start_time` columns from an earlier single-meeting-per-module feature.
+`live_sessions` deliberately does not touch them; if the two are meant to be
+one feature, reconciling them is a follow-up.
 
 ## Verified before delivery
 

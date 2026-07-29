@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAcademyAdmin } from '@/lib/auth';
 import { getProvider, providers } from '@/lib/providers';
-import { getValidAccessToken, getConnectedIntegrationId } from '@/lib/integrationsService';
-import pool from '@/lib/db';
+import {
+  getValidAccessToken,
+  getConnectedIntegrationId,
+  createLiveSession,
+  listLiveSessions,
+} from '@/lib/integrationsService';
 import type { ProviderName } from '@/lib/providers/types';
+
+// Reads a session cookie and the database on every call — never prerender it.
+export const dynamic = 'force-dynamic';
 
 /**
  * TODO — REQUIRED BEFORE USE: replace this with a real check against your
@@ -13,7 +20,7 @@ import type { ProviderName } from '@/lib/providers/types';
  * connected Zoom/Teams account's quota) on another academy's module.
  * Left throwing on purpose so this can't ship silently insecure.
  */
-async function assertModuleBelongsToAcademy(courseId: string, moduleId: string, academyId: number): Promise<void> {
+async function assertModuleBelongsToAcademy(courseId: string, moduleId: string, academyId: string): Promise<void> {
   throw Object.assign(
     new Error(
       'assertModuleBelongsToAcademy() is not implemented — wire this up to your real courses/modules schema before using this route.'
@@ -47,7 +54,7 @@ export async function POST(
     }
 
     const provider = getProvider(providerName);
-    const integrationId = await getConnectedIntegrationId(admin.academyId, provider.name as ProviderName);
+    const integrationId = await getConnectedIntegrationId(admin.academyId, provider.name);
     if (!integrationId) {
       return NextResponse.json(
         { error: `Academy has no connected ${provider.name} account. Connect it first.` },
@@ -55,33 +62,26 @@ export async function POST(
       );
     }
 
-    const accessToken = await getValidAccessToken(admin.academyId, provider.name as ProviderName);
+    const accessToken = await getValidAccessToken(admin.academyId, provider.name);
     const meeting = await provider.createMeeting(accessToken, { topic, start_time, duration_minutes });
 
-    const { rows } = await pool.query(
-      `INSERT INTO live_sessions
-         (academy_id, course_id, module_id, academy_integration_id, provider,
-          external_meeting_id, join_url, host_url, topic, start_time, duration_minutes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-       RETURNING id`,
-      [
-        admin.academyId,
-        courseId,
-        moduleId,
-        integrationId,
-        provider.name,
-        meeting.external_meeting_id,
-        meeting.join_url,
-        meeting.host_url,
-        topic,
-        start_time,
-        duration_minutes,
-      ]
-    );
+    const id = await createLiveSession({
+      academyId: admin.academyId,
+      courseId,
+      moduleId,
+      integrationId,
+      provider: provider.name,
+      externalMeetingId: meeting.external_meeting_id,
+      joinUrl: meeting.join_url,
+      hostUrl: meeting.host_url,
+      topic,
+      startTime: start_time,
+      durationMinutes: duration_minutes,
+    });
 
     return NextResponse.json(
       {
-        id: rows[0].id,
+        id,
         provider: provider.name,
         join_url: meeting.join_url,
         host_url: meeting.host_url,
@@ -105,12 +105,8 @@ export async function GET(
     const admin = await requireAcademyAdmin();
     await assertModuleBelongsToAcademy(courseId, moduleId, admin.academyId);
 
-    const { rows } = await pool.query(
-      `SELECT id, provider, join_url, topic, start_time, duration_minutes, status
-       FROM live_sessions WHERE module_id = $1 ORDER BY start_time DESC`,
-      [moduleId]
-    );
-    return NextResponse.json(rows);
+    const sessions = await listLiveSessions(moduleId, admin.academyId);
+    return NextResponse.json(sessions);
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: err.status ?? 500 });
   }
