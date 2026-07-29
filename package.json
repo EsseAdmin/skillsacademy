@@ -1,0 +1,50 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2822
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 \{\
+  "name": "skillsacademy",\
+  "version": "0.1.0",\
+  "private": true,\
+  "scripts": \{\
+    "dev": "next dev",\
+    "build": "next build",\
+    "start": "next start",\
+    "lint": "eslint",\
+    "smoke-test": "node scripts/smoke-test.mjs"\
+  \},\
+  "engines": \{\
+    "node": ">=20"\
+  \},\
+  "dependencies": \{\
+    "@netlify/blobs": "^10.7.9",\
+    "@netlify/database": "^1.1.0",\
+    "bcryptjs": "^3.0.3",\
+    "fast-xml-parser": "^5.10.1",\
+    "jose": "^6.2.3",\
+    "jszip": "^3.10.1",\
+    "next": "16.2.10",\
+    "pdf-lib": "^1.17.1",\
+    "pg": "^8.22.0",\
+    "react": "19.2.4",\
+    "react-dom": "19.2.4"\
+  \},\
+  "devDependencies": \{\
+    "@netlify/plugin-nextjs": "^5.15.12",\
+    "@tailwindcss/postcss": "^4",\
+    "@types/bcryptjs": "^2.4.6",\
+    "@types/node": "^22.20.1",\
+    "@types/pg": "^8.20.0",\
+    "@types/react": "^19",\
+    "@types/react-dom": "^19",\
+    "eslint": "^9",\
+    "eslint-config-next": "16.2.10",\
+    "playwright-core": "^1.61.1",\
+    "tailwindcss": "^4",\
+    "tsx": "^4.23.1",\
+    "typescript": "^5"\
+  \}\
+\}}
