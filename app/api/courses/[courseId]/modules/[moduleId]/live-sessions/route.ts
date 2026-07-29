@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAcademyAdmin } from '@/lib/auth';
 import { getProvider, providers } from '@/lib/providers';
@@ -14,25 +13,45 @@ import type { ProviderName } from '@/lib/providers/types';
 export const dynamic = 'force-dynamic';
 
 /**
- * Authorization boundary: confirms the module is attached to the course *and*
- * that both belong to the caller's academy. Without this an academy admin could
- * create a live session (and burn the connected Zoom/Teams account's quota) on
- * another academy's module.
+ * Authorization boundary: must confirm the module is attached to the course
+ * *and* that both belong to the caller's academy. Without this an academy admin
+ * could create a live session (and burn the connected Zoom/Teams account's
+ * quota) on another academy's module.
  *
- * Modules are linked to courses through the `course_modules` join table, and
- * both `courses` and `modules` carry their own `academy_id`; both are checked.
+ * NOT YET IMPLEMENTED. This feature's migrations only add `live_sessions` and
+ * `oauth_states`; the courses/modules tables live outside this slice of the
+ * schema, so the lookup can't be written without knowing their real table and
+ * column names. Until then this deliberately fails closed — every request to
+ * both handlers below is rejected with 501 rather than being allowed through
+ * unchecked.
+ *
+ * To implement: query whichever tables link a module to a course (e.g. a
+ * `course_modules` join table) and assert both sides carry the caller's
+ * `academy_id`, then 404 when nothing matches:
+ *
+ *   const { rows } = await query(
+ *     `SELECT 1 FROM course_modules cm
+ *        JOIN courses c ON c.id = cm.course_id
+ *        JOIN modules m ON m.id = cm.module_id
+ *       WHERE cm.course_id = $1 AND cm.module_id = $2
+ *         AND c.academy_id = $3 AND m.academy_id = $3`,
+ *     [courseId, moduleId, academyId]
+ *   );
+ *   if (rows.length === 0) {
+ *     throw Object.assign(new Error('Module not found for this course.'), { status: 404 });
+ *   }
  */
-async function assertModuleBelongsToAcademy(courseId: string, moduleId: string, academyId: string): Promise<void> {
+async function assertModuleBelongsToAcademy(
+  _courseId: string,
+  _moduleId: string,
+  _academyId: string
+): Promise<void> {
   throw Object.assign(
     new Error(
       'assertModuleBelongsToAcademy() is not implemented — wire this up to your real courses/modules schema before using this route.'
     ),
     { status: 501 }
   );
-
-  if (rows.length === 0) {
-    throw Object.assign(new Error('Module not found for this course.'), { status: 404 });
-  }
 }
 
 export async function POST(
