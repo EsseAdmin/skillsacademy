@@ -9,3 +9,25 @@
 # returns "Page not found".
 [[plugins]]
   package = "@netlify/plugin-nextjs"
+
+# The usual ways a bookmark or a hand-typed URL asks for the landing page.
+# Netlify resolves these before the Next.js handler sees them, so each one
+# arrives at the home page rather than a 404. `force` keeps them ahead of the
+# catch-all rule the Next.js Runtime generates.
+[[redirects]]
+  from = "/home"
+  to = "/"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/index"
+  to = "/"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/index.html"
+  to = "/"
+  status = 301
+  force = true
