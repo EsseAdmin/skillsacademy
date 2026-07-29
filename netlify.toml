@@ -1,0 +1,11 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+# Required. Because @netlify/plugin-nextjs is a devDependency in package.json,
+# Netlify skips auto-installing the Next.js Runtime and expects it to be
+# declared here. Without this block the build publishes the raw .next
+# directory as static files, no server handler is created, and every route
+# returns "Page not found".
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
