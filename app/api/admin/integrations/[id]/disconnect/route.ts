@@ -6,7 +6,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const { id } = await params;
     const admin = await requireAcademyAdmin();
-    const ok = await disconnectIntegration(Number(id), admin.academyId);
+    const ok = await disconnectIntegration(id, admin.academyId);
     if (!ok) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json({ ok: true });
   } catch (err: any) {

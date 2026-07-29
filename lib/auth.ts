@@ -2,8 +2,8 @@ import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
 
 export type AcademyAdmin = {
-  academyId: number;
-  userId: number;
+  academyId: string;
+  userId: string;
 };
 
 /**
@@ -35,8 +35,10 @@ export async function requireAcademyAdmin(): Promise<AcademyAdmin> {
 
   const { payload } = await jwtVerify(token, new TextEncoder().encode(secret));
 
-  const academyId = Number(payload.academyId); // CHECK: real claim name
-  const userId = Number(payload.sub ?? payload.userId); // CHECK: real claim name
+  // Every id in this database is a TEXT uuid, so the claims are read as
+  // strings rather than coerced to numbers.
+  const academyId = String(payload.academyId ?? ''); // CHECK: real claim name
+  const userId = String(payload.sub ?? payload.userId ?? ''); // CHECK: real claim name
   const role = payload.role; // CHECK: real claim name / value for "admin"
 
   if (!academyId || role !== 'admin') {
