@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAcademyAdmin } from '@/lib/auth';
 import { getProvider, providers } from '@/lib/providers';
@@ -6,20 +7,35 @@ import pool from '@/lib/db';
 import type { ProviderName } from '@/lib/providers/types';
 
 /**
- * TODO — REQUIRED BEFORE USE: replace this with a real check against your
- * existing courses/modules tables, confirming `moduleId` (and `courseId`)
- * actually belong to `academyId`. This is a hard authorization boundary —
- * without it, an academy admin could create a live session (and burn your
- * connected Zoom/Teams account's quota) on another academy's module.
- * Left throwing on purpose so this can't ship silently insecure.
+ * Authorization boundary: confirms the module is attached to the course *and*
+ * that both belong to the caller's academy. Without this an academy admin could
+ * create a live session (and burn the connected Zoom/Teams account's quota) on
+ * another academy's module.
+ *
+ * Modules are linked to courses through the `course_modules` join table, and
+ * both `courses` and `modules` carry their own `academy_id`; both are checked.
  */
-async function assertModuleBelongsToAcademy(courseId: string, moduleId: string, academyId: number): Promise<void> {
-  throw Object.assign(
-    new Error(
-      'assertModuleBelongsToAcademy() is not implemented — wire this up to your real courses/modules schema before using this route.'
-    ),
-    { status: 501 }
+async function assertModuleBelongsToAcademy(
+  courseId: string,
+  moduleId: string,
+  academyId: string
+): Promise<void> {
+  const { rows } = await pool.query(
+    `SELECT 1
+     FROM course_modules cm
+     JOIN courses c ON c.id = cm.course_id
+     JOIN modules m ON m.id = cm.module_id
+     WHERE cm.course_id = $1
+       AND cm.module_id = $2
+       AND c.academy_id = $3
+       AND m.academy_id = $3
+     LIMIT 1`,
+    [courseId, moduleId, academyId]
   );
+
+  if (rows.length === 0) {
+    throw Object.assign(new Error('Module not found for this course.'), { status: 404 });
+  }
 }
 
 export async function POST(
@@ -60,11 +76,12 @@ export async function POST(
 
     const { rows } = await pool.query(
       `INSERT INTO live_sessions
-         (academy_id, course_id, module_id, academy_integration_id, provider,
-          external_meeting_id, join_url, host_url, topic, start_time, duration_minutes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         (id, academy_id, course_id, module_id, academy_integration_id, provider,
+          external_meeting_id, join_url, host_url, topic, start_time, duration_minutes, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING id`,
       [
+        crypto.randomUUID(),
         admin.academyId,
         courseId,
         moduleId,
@@ -76,6 +93,7 @@ export async function POST(
         topic,
         start_time,
         duration_minutes,
+        new Date().toISOString(),
       ]
     );
 
@@ -107,8 +125,10 @@ export async function GET(
 
     const { rows } = await pool.query(
       `SELECT id, provider, join_url, topic, start_time, duration_minutes, status
-       FROM live_sessions WHERE module_id = $1 ORDER BY start_time DESC`,
-      [moduleId]
+       FROM live_sessions
+       WHERE module_id = $1 AND academy_id = $2
+       ORDER BY start_time DESC`,
+      [moduleId, admin.academyId]
     );
     return NextResponse.json(rows);
   } catch (err: any) {

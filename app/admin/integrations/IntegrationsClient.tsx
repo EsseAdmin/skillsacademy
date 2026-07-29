@@ -19,7 +19,7 @@ export default function IntegrationsClient({
   const [integrations, setIntegrations] = useState(initialIntegrations);
   const byProvider = Object.fromEntries(integrations.map((i) => [i.provider, i]));
 
-  async function disconnect(id: number) {
+  async function disconnect(id: string) {
     await fetch(`/api/admin/integrations/${id}/disconnect`, { method: 'POST' });
     const res = await fetch('/api/admin/integrations');
     setIntegrations(await res.json());

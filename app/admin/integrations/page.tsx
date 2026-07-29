@@ -2,8 +2,9 @@ import { requireAcademyAdmin } from '@/lib/auth';
 import { listIntegrations } from '@/lib/integrationsService';
 import IntegrationsClient from './IntegrationsClient';
 
-// Adjust the import path above (@/lib/...) if this app's tsconfig path
-// alias differs — check tsconfig.json's "paths" entry.
+// This page reads the session cookie and queries the database, so it can only
+// be rendered per-request — never prerendered at build time.
+export const dynamic = 'force-dynamic';
 
 export default async function IntegrationsPage() {
   const admin = await requireAcademyAdmin();
