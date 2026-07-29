@@ -1,61 +1,10 @@
-import type { Metadata } from 'next';
-import Link from 'next/link';
-import { Plans, Academies, type SubscriptionPlan } from '@/lib/queries';
-import { formatGBP } from '@/lib/utils';
-import { FALLBACK_PLANS } from './fallback-plans';
-
-// Pricing and the academy count come from the database on every request, so
-// this page is never prerendered at build time (database credentials are only
-// injected at request time).
-export const dynamic = 'force-dynamic';
-
-export const metadata: Metadata = {
-  title: 'SkillsAcademy.ai — Build Your Own Learning Academy',
-  description:
-    'SkillsAcademy.ai lets businesses, charities and public sector organisations launch their own branded, multi-tenant training academy in minutes.',
-};
-
-// A landing page that returns a 500 because of a database hiccup is worse than
-// one showing the standard plans, so both reads degrade instead of throwing.
-// Each failure is logged so a deploy that quietly falls back is still
-// diagnosable from the function logs.
-async function loadPlans(): Promise<SubscriptionPlan[]> {
-  try {
-    const plans = await Plans.all(true);
-    return plans.length > 0 ? plans : FALLBACK_PLANS;
-  } catch (err) {
-    console.error('Home page: could not read subscription plans, using fallback pricing.', err);
-    return FALLBACK_PLANS;
-  }
-}
-
-// null means "unknown" — the hero omits the stat rather than claiming zero.
-async function loadAcademyCount(): Promise<number | null> {
-  try {
-    return await Academies.count();
-  } catch (err) {
-    console.error('Home page: could not count academies, hiding that hero stat.', err);
-    return null;
-  }
-}
-
-// Stored as a JSON array in a TEXT column; a jsonb column would arrive already
-// parsed, and malformed content should cost the card its feature list, nothing
-// more.
-function planFeatures(plan: SubscriptionPlan): string[] {
-  const raw = plan.features_json;
-  if (Array.isArray(raw)) return raw.filter((f): f is string => typeof f === 'string');
-  if (!raw) return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((f): f is string => typeof f === 'string') : [];
-  } catch {
-    return [];
-  }
-}
+import Link from "next/link";
+import { Plans, Academies } from "@/lib/queries";
+import { formatGBP } from "@/lib/utils";
 
 export default async function HomePage() {
-  const [plans, academyCount] = await Promise.all([loadPlans(), loadAcademyCount()]);
+  const plans = await Plans.all(true);
+  const academyCount = (await Academies.all()).length;
 
   return (
     <>
@@ -95,12 +44,10 @@ export default async function HomePage() {
             <div className="num">14</div>
             <div className="label">Day Free Trial</div>
           </div>
-          {academyCount !== null && (
-            <div className="hero-stat">
-              <div className="num">{academyCount}+</div>
-              <div className="label">Academies Live</div>
-            </div>
-          )}
+          <div className="hero-stat">
+            <div className="num">{academyCount}+</div>
+            <div className="label">Academies Live</div>
+          </div>
         </div>
       </section>
 
@@ -154,7 +101,7 @@ export default async function HomePage() {
             <h2 className="section-title">
               A full academy platform,
               <br />
-              <em style={{ color: 'var(--gold)', fontStyle: 'italic' }}>built for you.</em>
+              <em style={{ color: "var(--gold)", fontStyle: "italic" }}>built for you.</em>
             </h2>
             <p className="section-sub" style={{ marginBottom: 32 }}>
               We don&apos;t sell courses — we give you the infrastructure to build your own: courses,
@@ -260,10 +207,10 @@ export default async function HomePage() {
         </p>
         <div className="tiers-grid">
           {plans.map((plan, i) => {
-            const features = planFeatures(plan);
+            const features: string[] = JSON.parse(plan.features_json);
             const featured = i === 1;
             return (
-              <div key={plan.id} className={`tier-card${featured ? ' featured' : ''}`}>
+              <div key={plan.id} className={`tier-card${featured ? " featured" : ""}`}>
                 {featured && <div className="tier-badge">Most Popular</div>}
                 <div className="tier-num">Plan</div>
                 <div className="tier-title">{plan.name}</div>
@@ -323,7 +270,7 @@ export default async function HomePage() {
 
       {/* CTA */}
       <section className="cta-section" id="contact">
-        <div className="section-tag" style={{ color: 'var(--navy)', opacity: 0.6 }}>
+        <div className="section-tag" style={{ color: "var(--navy)", opacity: 0.6 }}>
           Get Started
         </div>
         <h2 className="section-title">Ready to build your academy?</h2>

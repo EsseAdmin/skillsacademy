@@ -1,48 +1,69 @@
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
+import { SignJWT, jwtVerify } from "jose";
+import { cookies } from "next/headers";
+import bcrypt from "bcryptjs";
+import type { Role } from "./queries";
 
-export type AcademyAdmin = {
-  academyId: string;
+const SESSION_COOKIE = "sa_session";
+const secretKey = process.env.AUTH_SECRET || "skillsacademy-dev-secret-change-me-in-production";
+const key = new TextEncoder().encode(secretKey);
+
+export interface SessionPayload {
   userId: string;
-};
-
-/**
- * ADAPT THIS to however your app already authenticates admins — this is the
- * single integration point every route in this feature depends on.
- *
- * Written assuming (unconfirmed — `jose` and `bcryptjs` are already
- * dependencies, which suggests a JWT session cookie + password auth, but the
- * cookie name, claim names, and admin-role check below are guesses):
- *   - a session JWT is stored in a cookie (name guessed as "session" below)
- *   - it's signed with a symmetric secret in AUTH_SECRET / SESSION_SECRET
- *   - its payload includes an academyId and a role/isAdmin claim
- *
- * Replace the body of this function with a call into your real session
- * helper if one already exists — do not duplicate auth logic if so.
- */
-export async function requireAcademyAdmin(): Promise<AcademyAdmin> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('session')?.value; // CHECK: real cookie name
-
-  if (!token) {
-    throw Object.assign(new Error('Not authenticated.'), { status: 401 });
-  }
-
-  const secret = process.env.AUTH_SECRET || process.env.SESSION_SECRET;
-  if (!secret) {
-    throw new Error('AUTH_SECRET/SESSION_SECRET not configured.');
-  }
-
-  const { payload } = await jwtVerify(token, new TextEncoder().encode(secret));
-
-  // Ids in this database are TEXT UUIDs, so the claims are read as strings.
-  const academyId = payload.academyId == null ? '' : String(payload.academyId); // CHECK: real claim name
-  const userId = String(payload.sub ?? payload.userId ?? ''); // CHECK: real claim name
-  const role = payload.role; // CHECK: real claim name / value for "admin"
-
-  if (!academyId || role !== 'admin') {
-    throw Object.assign(new Error('Not authorized for this academy.'), { status: 403 });
-  }
-
-  return { academyId, userId };
+  role: Role;
+  academyId: string | null;
+  academySlug: string | null;
+  name: string;
+  email: string;
+  [key: string]: unknown;
 }
+
+export async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, 10);
+}
+
+export async function verifyPassword(password: string, hash: string): Promise<boolean> {
+  return bcrypt.compare(password, hash);
+}
+
+export async function createSessionToken(payload: SessionPayload): Promise<string> {
+  return new SignJWT(payload)
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("7d")
+    .sign(key);
+}
+
+export async function verifySessionToken(token: string): Promise<SessionPayload | null> {
+  try {
+    const { payload } = await jwtVerify(token, key);
+    return payload as unknown as SessionPayload;
+  } catch {
+    return null;
+  }
+}
+
+export async function setSessionCookie(payload: SessionPayload) {
+  const token = await createSessionToken(payload);
+  const store = await cookies();
+  store.set(SESSION_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7,
+  });
+}
+
+export async function clearSessionCookie() {
+  const store = await cookies();
+  store.delete(SESSION_COOKIE);
+}
+
+export async function getSession(): Promise<SessionPayload | null> {
+  const store = await cookies();
+  const token = store.get(SESSION_COOKIE)?.value;
+  if (!token) return null;
+  return verifySessionToken(token);
+}
+
+export { SESSION_COOKIE };

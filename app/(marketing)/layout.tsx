@@ -1,34 +1,29 @@
-import './marketing.css';
-import Link from 'next/link';
-import type { ReactNode } from 'react';
+import "./marketing.css";
+import Link from "next/link";
 
-// Chrome for the public marketing site: the top navigation and the footer.
-// Everything the stylesheet targets lives under `.marketing`, so these styles
-// cannot leak into the admin area, which keeps using Tailwind from
-// app/globals.css.
-export default function MarketingLayout({ children }: { children: ReactNode }) {
+export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="marketing min-h-screen">
+    <div className="marketing">
       <nav>
         <Link href="/" className="nav-logo">
           Skills<span>Academy</span>.ai
         </Link>
         <ul className="nav-links">
           <li>
-            <a href="/#solution">Platform</a>
+            <Link href="/#solution">Platform</Link>
           </li>
           <li>
-            <a href="/#segments">Who It&apos;s For</a>
+            <Link href="/#segments">Who It&apos;s For</Link>
           </li>
           <li>
-            <a href="/#pricing">Pricing</a>
+            <Link href="/#pricing">Pricing</Link>
           </li>
           <li>
-            <a href="/#how">How It Works</a>
+            <Link href="/#how">How It Works</Link>
           </li>
         </ul>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          <Link href="/super-admin/login" className="nav-outline" style={{ display: 'none' }}>
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <Link href="/super-admin/login" className="nav-outline" style={{ display: "none" }}>
             Platform Admin
           </Link>
           <Link href="/login" className="nav-outline">
@@ -44,14 +39,11 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
         <div className="footer-logo">
           Skills<span>Academy</span>.ai
         </div>
-        <p>
-          © {new Date().getFullYear()} SkillsAcademy.ai — Academy-as-a-Service for business, charity
-          &amp; public sector.
-        </p>
-        <div style={{ display: 'flex', gap: 20 }}>
-          <a href="/signup">Create an Academy</a>
-          <a href="/login">Academy Login</a>
-          <a href="/super-admin/login">Platform Admin</a>
+        <p>© {new Date().getFullYear()} SkillsAcademy.ai — Academy-as-a-Service for business, charity &amp; public sector.</p>
+        <div style={{ display: "flex", gap: 20 }}>
+          <Link href="/signup">Create an Academy</Link>
+          <Link href="/login">Academy Login</Link>
+          <Link href="/super-admin/login">Platform Admin</Link>
         </div>
       </footer>
     </div>

@@ -1,37 +1,34 @@
-import crypto from 'node:crypto';
+import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:crypto";
 
-const ALGO = 'aes-256-gcm';
+// Symmetric encryption for at-rest secrets we must store but never display
+// back (Zoom/Microsoft OAuth access + refresh tokens). Uses AES-256-GCM with
+// a key derived from AUTH_SECRET (the same secret that already signs session
+// cookies — see src/lib/auth.ts), so no extra environment variable is
+// required. Ciphertext is stored as `${ivHex}:${authTagHex}:${cipherHex}`.
+const APP_SECRET = process.env.AUTH_SECRET || "dev-only-insecure-secret-change-me";
+const KEY = scryptSync(APP_SECRET, "skillsacademy-integration-tokens", 32);
 
-function getKey(): Buffer {
-  const hex = process.env.INTEGRATIONS_ENCRYPTION_KEY;
-  if (!hex || hex.length !== 64) {
-    throw new Error(
-      'INTEGRATIONS_ENCRYPTION_KEY must be set as a 64-character hex string (32 bytes). ' +
-        'Generate one with: openssl rand -hex 32'
-    );
-  }
-  return Buffer.from(hex, 'hex');
-}
-
-// Encrypts a plaintext string (an OAuth token) into a base64 blob containing
-// iv + authTag + ciphertext, safe to store as TEXT in Postgres.
-export function encrypt(plaintext: string | null | undefined): string | null {
-  if (plaintext == null) return null;
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv(ALGO, getKey(), iv);
-  const ciphertext = Buffer.concat([cipher.update(String(plaintext), 'utf8'), cipher.final()]);
+export function encryptSecret(plaintext: string): string {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", KEY, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   const authTag = cipher.getAuthTag();
-  return Buffer.concat([iv, authTag, ciphertext]).toString('base64');
+  return `${iv.toString("hex")}:${authTag.toString("hex")}:${encrypted.toString("hex")}`;
 }
 
-export function decrypt(blob: string | null | undefined): string | null {
-  if (blob == null) return null;
-  const buf = Buffer.from(blob, 'base64');
-  const iv = buf.subarray(0, 12);
-  const authTag = buf.subarray(12, 28);
-  const ciphertext = buf.subarray(28);
-  const decipher = crypto.createDecipheriv(ALGO, getKey(), iv);
-  decipher.setAuthTag(authTag);
-  const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-  return plaintext.toString('utf8');
+export function decryptSecret(ciphertext: string): string {
+  const [ivHex, authTagHex, dataHex] = ciphertext.split(":");
+  if (!ivHex || !authTagHex || !dataHex) {
+    throw new Error("decryptSecret: malformed ciphertext");
+  }
+  const decipher = createDecipheriv("aes-256-gcm", KEY, Buffer.from(ivHex, "hex"));
+  decipher.setAuthTag(Buffer.from(authTagHex, "hex"));
+  const decrypted = Buffer.concat([decipher.update(Buffer.from(dataHex, "hex")), decipher.final()]);
+  return decrypted.toString("utf8");
+}
+
+export function generateCertificateNumber(): string {
+  // e.g. SA-7F3C9A2B — short, unambiguous (uppercase hex), easy to read aloud
+  // for a public verification page.
+  return `SA-${randomBytes(4).toString("hex").toUpperCase()}`;
 }

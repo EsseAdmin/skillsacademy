@@ -1,19 +1,20 @@
-import type { Metadata } from 'next';
-import type { ReactNode } from 'react';
-import './globals.css';
+import type { Metadata } from "next";
+import "./globals.css";
 
 export const metadata: Metadata = {
-  title: 'Skill Academies',
-  description: 'Run your academy’s courses, modules, and live sessions in one place.',
+  title: "SkillsAcademy.ai — Build Your Own Learning Academy",
+  description:
+    "SkillsAcademy.ai lets businesses, charities and public sector organisations launch their own branded, multi-tenant training academy in minutes.",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
-    <html lang="en">
-      {/* Deliberately bare: the public marketing pages bring their own dark
-          navigation and footer, while the admin area and the 404 page render the
-          Skill Academies wordmark themselves. */}
-      <body className="min-h-screen bg-white text-gray-900 antialiased">{children}</body>
+    <html lang="en" className="h-full antialiased">
+      <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );
 }
