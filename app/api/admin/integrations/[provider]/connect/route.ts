@@ -4,6 +4,9 @@ import { getProvider } from '@/lib/providers';
 import { createOAuthState } from '@/lib/integrationsService';
 import type { ProviderName } from '@/lib/providers/types';
 
+// Reads a session cookie and the database on every call — never prerender it.
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest, { params }: { params: Promise<{ provider: string }> }) {
   try {
     const { provider: providerName } = await params;

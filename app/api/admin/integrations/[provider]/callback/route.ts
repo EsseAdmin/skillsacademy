@@ -3,6 +3,10 @@ import { getProvider } from '@/lib/providers';
 import { consumeOAuthState, saveConnection } from '@/lib/integrationsService';
 import type { ProviderName } from '@/lib/providers/types';
 
+// Hit by the provider with a one-time code, and writes to the database —
+// never prerender it.
+export const dynamic = 'force-dynamic';
+
 // No requireAcademyAdmin() here on purpose — this is the OAuth redirect
 // target hit directly by Zoom/Microsoft, not an authenticated fetch from
 // your own frontend. The oauth_states row (created only for an

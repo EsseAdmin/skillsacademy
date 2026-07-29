@@ -1,44 +1,33 @@
-import { getDatabase } from '@netlify/database';
-import type { Pool } from 'pg';
+import { getDatabase, type DatabaseConnection } from '@netlify/database';
+import type { Pool, QueryResultRow } from 'pg';
 
-// Postgres access via Netlify Database.
+// Netlify Database (managed Postgres) resolves its own connection string from
+// the environment, so there is nothing to configure here.
 //
-// The connection is resolved by the Netlify runtime at request time, so it MUST
-// NOT be resolved while this module is being imported: Next.js imports every
-// page/route module during the build to collect its config, and no database
-// connection exists at that point. Resolving eagerly here fails the build.
-//
-// Everything below is therefore lazy — the pool is created on first use and
-// reused afterwards.
+// Nothing in this module may run at import time. `next build` imports every
+// route module during its "Collecting page data" step, and the database
+// credentials are only injected at request time — so connecting (or even
+// asserting that a connection string exists) at module scope fails the build.
+// Everything below is therefore resolved lazily, on first query.
+let connection: DatabaseConnection | undefined;
 
-declare global {
-  // eslint-disable-next-line no-var
-  var __academyPgPool: Pool | undefined;
+function getConnection(): DatabaseConnection {
+  connection ??= getDatabase();
+  return connection;
 }
 
-function createPool(): Pool {
-  // On Netlify the connection is injected automatically. Locally (plain
-  // `next dev`, or the standalone scripts) fall back to an explicit connection
-  // string if one is present in the environment.
-  const connectionString = process.env.NETLIFY_DATABASE_URL || process.env.DATABASE_URL;
-  const { pool } = getDatabase(connectionString ? { connectionString } : undefined);
-  return pool as unknown as Pool;
+/**
+ * Runs a parameterised SQL query against Netlify Database.
+ * The connection is opened on first use and reused afterwards.
+ */
+export async function query<T extends QueryResultRow = QueryResultRow>(
+  text: string,
+  params?: unknown[]
+): Promise<{ rows: T[]; rowCount: number | null }> {
+  // Netlify Database hands back either the node-postgres pool or the Neon
+  // serverless pool depending on the runtime; both expose the same
+  // `query(text, params)` contract, so we narrow to the shared one.
+  const pool = getConnection().pool as unknown as Pool;
+  const result = await pool.query<T>(text, params as unknown[]);
+  return { rows: result.rows, rowCount: result.rowCount };
 }
-
-function getPool(): Pool {
-  // Cached on globalThis so hot-reload in dev doesn't exhaust connections.
-  globalThis.__academyPgPool ??= createPool();
-  return globalThis.__academyPgPool;
-}
-
-// Behaves exactly like a `pg.Pool` (`query`, `connect`, …) but defers creating
-// the underlying pool until the first property access.
-const pool = new Proxy({} as Pool, {
-  get(_target, prop) {
-    const real = getPool();
-    const value = Reflect.get(real, prop, real);
-    return typeof value === 'function' ? value.bind(real) : value;
-  },
-});
-
-export default pool;
