@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local Netlify build artifacts and plugin caches — vendored code, not ours.
+    ".netlify/**",
   ]),
 ]);
 
