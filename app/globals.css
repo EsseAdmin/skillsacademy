@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* ── App shell (portal / dashboard) shared styles ── */
+.app-shell {
+  --brand-primary: #0b1f3b;
+  --brand-secondary: #12294d;
+  --brand-accent: #fbcb07;
+  min-height: 100vh;
+  background: #f6f7fb;
+}
+
+.app-sidebar {
+  background: var(--brand-primary);
+}
+
+.app-sidebar a.active {
+  background: rgba(255, 255, 255, 0.1);
+  border-left: 3px solid var(--brand-accent);
+}
+
+.app-btn-primary {
+  background: var(--brand-primary);
+  color: #fff;
+  transition: opacity 0.15s;
+}
+.app-btn-primary:hover {
+  opacity: 0.88;
+}
+
+.app-btn-accent {
+  background: var(--brand-accent);
+  color: var(--brand-primary);
+  font-weight: 700;
+}
+.app-btn-accent:hover {
+  opacity: 0.9;
+}
+
+.app-badge-accent {
+  background: color-mix(in srgb, var(--brand-accent) 20%, white);
+  color: var(--brand-primary);
+}
+
+.app-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+}
+
+.app-link {
+  color: var(--brand-primary);
+}
