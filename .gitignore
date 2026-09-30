@@ -1,0 +1,28 @@
+# Dependencies
+node_modules
+
+# Next.js build output
+.next
+out
+tsconfig.tsbuildinfo
+
+# Local Netlify folder
+.netlify
+
+# Env files — never commit real secrets
+.env
+.env.local
+.env.*.local
+
+# Local upload fallback (used when Netlify Blobs isn't available, e.g. plain `npm run dev`)
+uploads
+
+# OS junk
+.DS_Store
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+
+# Logs
+npm-debug.log*
