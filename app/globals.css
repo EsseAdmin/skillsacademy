@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* ── App shell (portal / dashboard) shared styles ── */
+.app-shell {
+  --brand-primary: #0b1f3b;
+  --brand-secondary: #12294d;
+  --brand-accent: #fbcb07;
+  /* Default assumes the platform's own dark navy; a tenant portal
+     overrides this inline (see lib/theme.ts's themeVars) with a value
+     computed from that academy's actual template colour, so a light
+     template's sidebar/buttons get dark text instead of invisible
+     white-on-white. */
+  --brand-primary-contrast: #ffffff;
+  min-height: 100vh;
+  background: #f6f7fb;
+}
+
+.app-sidebar {
+  background: var(--brand-primary);
+  color: var(--brand-primary-contrast);
+}
+
+.app-sidebar-border {
+  border-color: color-mix(in srgb, var(--brand-primary-contrast) 10%, transparent);
+}
+
+.app-sidebar a:hover {
+  background: color-mix(in srgb, var(--brand-primary-contrast) 8%, transparent);
+}
+
+.app-sidebar a.active {
+  background: color-mix(in srgb, var(--brand-primary-contrast) 10%, transparent);
+  border-left: 3px solid var(--brand-accent);
+}
+
+.app-sidebar-pill {
+  background: color-mix(in srgb, var(--brand-primary-contrast) 10%, transparent);
+}
+.app-sidebar-pill:hover {
+  background: color-mix(in srgb, var(--brand-primary-contrast) 20%, transparent);
+}
+
+.app-btn-primary {
+  background: var(--brand-primary);
+  color: var(--brand-primary-contrast);
+  transition: opacity 0.15s;
+}
+.app-btn-primary:hover {
+  opacity: 0.88;
+}
+
+.app-btn-accent {
+  background: var(--brand-accent);
+  color: var(--brand-primary);
+  font-weight: 700;
+}
+.app-btn-accent:hover {
+  opacity: 0.9;
+}
+
+.app-badge-accent {
+  background: color-mix(in srgb, var(--brand-accent) 20%, white);
+  color: var(--brand-primary);
+}
+
+.app-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+}
+
+.app-link {
+  color: var(--brand-primary);
+}
