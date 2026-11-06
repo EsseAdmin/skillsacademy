@@ -1,0 +1,16 @@
+import { requireTenantSession } from "@/lib/authz";
+import { INSTRUCTOR_NAV } from "@/lib/nav";
+import QuizNewPage from "@/components/QuizNewPage";
+
+export default async function Page({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ courseId?: string }>;
+}) {
+  const { slug } = await params;
+  const { courseId } = await searchParams;
+  const session = await requireTenantSession(slug, ["INSTRUCTOR"]);
+  return <QuizNewPage slug={slug} area="instructor" session={session} navItems={INSTRUCTOR_NAV(slug)} courseId={courseId} />;
+}
