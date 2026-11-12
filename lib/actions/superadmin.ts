@@ -1,0 +1,270 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { Academies, Plans, PlatformSettings } from "@/lib/queries";
+import { requireSuperAdminSession } from "@/lib/authz";
+import { getStripeClient, ensureStripePrice, priceBelowStripeMinimum, stripeErrorLine, STRIPE_MIN_GBP_PENCE } from "@/lib/stripe";
+import { logIntegrationEvent } from "@/lib/integrationLog";
+import { redirect } from "next/navigation";
+import type { FormState } from "./auth";
+import { parseTrialDays, MAX_TRIAL_DAYS } from "@/lib/trial";
+import { stopStripeBilling } from "@/lib/billingCancel";
+import { saHref } from "@/lib/superAdminPath";
+import { parseComplimentaryEnd, cleanNote } from "@/lib/complimentary";
+
+// Public pages that quote trial lengths and prices; refreshed whenever plans change.
+function refreshPublicPlanPages() {
+  revalidatePath("/");
+  revalidatePath("/signup");
+  revalidatePath("/super-admin/plans");
+}
+
+export async function deleteAcademy(formData: FormData) {
+  await requireSuperAdminSession();
+  const id = String(formData.get("academyId") || "");
+  // An academy that's being removed must not keep being billed. This ends any
+  // live Stripe subscription straight away (an academy that asked to cancel has
+  // already had renewals switched off; deleting it ends the subscription now).
+  const academy = await Academies.byId(id);
+  let billingFailed = false;
+  if (academy) {
+    const result = await stopStripeBilling(academy, "immediately");
+    billingFailed = !result.ok;
+    if (billingFailed) {
+      await logIntegrationEvent({
+        kind: "stripe",
+        level: "error",
+        message: `Academy "${academy.slug}" was deleted but its Stripe subscription could not be cancelled.`,
+        detail: `${result.error ?? "Unknown error"} — cancel the subscription for customer ${academy.stripe_customer_id} in the Stripe Dashboard so no further payments are taken.`,
+      });
+    }
+  }
+  await Academies.softDelete(id);
+  revalidatePath("/super-admin/academies");
+  revalidatePath("/super-admin");
+  if (billingFailed) redirect(saHref("/super-admin/academies?error=billing_not_stopped"));
+}
+
+export async function restoreAcademy(formData: FormData) {
+  await requireSuperAdminSession();
+  const id = String(formData.get("academyId") || "");
+  await Academies.restore(id);
+  // A restored academy starts fresh: the old cancellation request no longer applies.
+  await Academies.clearCancellationRequest(id);
+  revalidatePath("/super-admin/academies");
+}
+
+export async function permanentlyDeleteAcademy(formData: FormData) {
+  await requireSuperAdminSession();
+  const id = String(formData.get("academyId") || "");
+  const academy = await Academies.byId(id);
+  // Only ever erase an academy that's already sitting in the "Deleted
+  // academies" section — guards against a stray/forged form submission
+  // permanently wiping out a live academy, since unlike deleteAcademy
+  // above, this has no restore afterwards.
+  if (!academy || !academy.is_deleted) return;
+  try {
+    await Academies.permanentlyDelete(id);
+  } catch (err) {
+    // The delete runs in one transaction, so a failure leaves the academy
+    // exactly as it was. Show why instead of Next's generic error page, and
+    // keep the real cause where the System check page can show it.
+    console.error(`[superadmin] permanently deleting academy ${academy.slug} failed:`, err);
+    await logIntegrationEvent({
+      kind: "stripe",
+      level: "error",
+      message: `Permanently deleting academy "${academy.slug}" failed — nothing was removed.`,
+      detail: (err as Error)?.message?.slice(0, 500),
+    });
+    redirect(saHref("/super-admin/academies?error=delete_failed"));
+  }
+  revalidatePath("/super-admin/academies");
+}
+
+export async function updateAcademyBySuperAdmin(formData: FormData) {
+  await requireSuperAdminSession();
+  const id = String(formData.get("academyId") || "");
+  const plan_id = String(formData.get("plan_id") || "");
+  const template_id = String(formData.get("template_id") || "");
+  const subscription_status = String(formData.get("subscription_status") || "");
+  await Academies.update(id, { plan_id, template_id, subscription_status });
+  revalidatePath("/super-admin/academies");
+}
+
+export async function createPlan(_prevState: FormState, formData: FormData): Promise<FormState> {
+  await requireSuperAdminSession();
+  const key = String(formData.get("key") || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const name = String(formData.get("name") || "").trim();
+  const priceRaw = String(formData.get("price") || "0");
+  const trialRaw = String(formData.get("trial_days") ?? "").trim();
+  const trialDays = trialRaw === "" ? 14 : parseTrialDays(trialRaw);
+  const maxLearners = formData.get("max_learners") ? parseInt(String(formData.get("max_learners")), 10) : null;
+  const maxInstructors = formData.get("max_instructors") ? parseInt(String(formData.get("max_instructors")), 10) : null;
+  const maxCourses = formData.get("max_courses") ? parseInt(String(formData.get("max_courses")), 10) : null;
+  const aiLimitRaw = String(formData.get("ai_monthly_limit") || "").trim();
+  const aiMonthlyLimit = aiLimitRaw && !Number.isNaN(parseInt(aiLimitRaw, 10)) ? Math.max(0, parseInt(aiLimitRaw, 10)) : null;
+  const featuresRaw = String(formData.get("features") || "");
+  const features = featuresRaw.split("\n").map((f) => f.trim()).filter(Boolean);
+
+  if (!key || !name) return { error: "Plan key and name are required." };
+  if (trialDays === null) return { error: `The free trial must be a whole number of days from 0 to ${MAX_TRIAL_DAYS} (0 means no free trial).` };
+  if (await Plans.byKey(key)) return { error: "A plan with that key already exists." };
+
+  const pricePence = Math.max(0, Math.round(parseFloat(priceRaw || "0") * 100));
+  if (priceBelowStripeMinimum(pricePence)) {
+    return { error: `Card payments can't be taken below £${(STRIPE_MIN_GBP_PENCE / 100).toFixed(2)} (Stripe's minimum). Use £0.00 for a free plan or at least £0.30.` };
+  }
+
+  const existingPlans = await Plans.all();
+  await Plans.create({
+    key,
+    name,
+    price_pence: pricePence,
+    trial_days: trialDays,
+    max_learners: maxLearners,
+    max_instructors: maxInstructors,
+    max_courses: maxCourses,
+    ai_monthly_limit: aiMonthlyLimit,
+    features,
+    sort_order: existingPlans.length + 1,
+  });
+  refreshPublicPlanPages();
+  return { error: undefined };
+}
+
+export async function updatePlan(formData: FormData) {
+  await requireSuperAdminSession();
+  const id = String(formData.get("planId") || "");
+  const name = String(formData.get("name") || "");
+  const priceRaw = String(formData.get("price") || "");
+  const trialRaw = String(formData.get("trial_days") ?? "").trim();
+  const trialDays = trialRaw === "" ? undefined : parseTrialDays(trialRaw);
+  if (trialDays === null) redirect(saHref("/super-admin/plans?error=trial_days"));
+  const maxLearners = formData.get("max_learners") ? parseInt(String(formData.get("max_learners")), 10) : null;
+  const maxInstructors = formData.get("max_instructors") ? parseInt(String(formData.get("max_instructors")), 10) : null;
+  const maxCourses = formData.get("max_courses") ? parseInt(String(formData.get("max_courses")), 10) : null;
+  const aiLimitRaw = String(formData.get("ai_monthly_limit") || "").trim();
+  const aiMonthlyLimit = aiLimitRaw && !Number.isNaN(parseInt(aiLimitRaw, 10)) ? Math.max(0, parseInt(aiLimitRaw, 10)) : null;
+  const featuresRaw = formData.get("features");
+  const features = featuresRaw != null ? String(featuresRaw).split("\n").map((f) => f.trim()).filter(Boolean) : undefined;
+  const is_active = formData.get("is_active") === "on";
+
+  // Stripe can't charge less than 30p; refuse the change and say why rather
+  // than saving a price that would make every checkout for this plan fail.
+  if (priceRaw && priceBelowStripeMinimum(Math.max(0, Math.round(parseFloat(priceRaw) * 100)))) {
+    redirect(saHref("/super-admin/plans?error=min_price"));
+  }
+
+  await Plans.update(id, {
+    name: name || undefined,
+    price_pence: priceRaw ? Math.max(0, Math.round(parseFloat(priceRaw) * 100)) : undefined,
+    trial_days: trialDays,
+    max_learners: maxLearners,
+    max_instructors: maxInstructors,
+    max_courses: maxCourses,
+    ai_monthly_limit: aiMonthlyLimit,
+    features,
+    is_active,
+  });
+  refreshPublicPlanPages();
+}
+
+// One number for every plan: the quick way to run a promotion ("7 days free")
+// without editing each plan. The homepage, pricing cards and sign-up page all
+// read the plans, so they change as soon as this saves. Academies already on a
+// trial keep the end date they were given when they signed up.
+export async function setTrialDaysForAllPlans(formData: FormData) {
+  await requireSuperAdminSession();
+  const days = parseTrialDays(formData.get("trial_days"));
+  if (days === null) redirect(saHref("/super-admin/plans?error=trial_days"));
+  await Plans.setTrialDaysForAll(days);
+  refreshPublicPlanPages();
+  redirect(saHref(`/super-admin/plans?trial_saved=${days}`));
+}
+
+export async function deletePlan(formData: FormData) {
+  await requireSuperAdminSession();
+  const id = String(formData.get("planId") || "");
+  await Plans.delete(id);
+  revalidatePath("/super-admin/plans");
+  revalidatePath("/");
+}
+
+export type StripeSyncState = { error?: string; message?: string } | undefined;
+
+// Provisions a real Stripe Product + Price for every active plan up front,
+// so an academy admin subscribing never has to wait on that happening for
+// the first time mid-checkout. Also useful to re-run after changing a
+// plan's price — Stripe Prices are immutable, so this mints a fresh one
+// and points the plan at it (see lib/stripe.ts's ensureStripePrice);
+// academies already subscribed keep billing at their original price until
+// they resubscribe or change plans, same as most real SaaS billing changes.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- useActionState always calls with (prevState, formData); this action needs neither.
+export async function syncPlansToStripe(_prevState: StripeSyncState, _formData: FormData): Promise<StripeSyncState> {
+  await requireSuperAdminSession();
+  const stripe = getStripeClient();
+  if (!stripe) {
+    return { error: "Add a STRIPE_SECRET_KEY environment variable first — see DEPLOYMENT.md." };
+  }
+
+  const plans = await Plans.all(true);
+  let synced = 0;
+  for (const plan of plans) {
+    try {
+      const { productId, priceId } = await ensureStripePrice(stripe, plan);
+      if (productId !== plan.stripe_product_id || priceId !== plan.stripe_price_id) {
+        await Plans.setStripeIds(plan.id, productId, priceId);
+      }
+      synced++;
+    } catch (err) {
+      await logIntegrationEvent({ kind: "stripe", level: "error", message: `Sync to Stripe failed on plan "${plan.name}".`, detail: stripeErrorLine(err) });
+      return { error: `Synced ${synced} of ${plans.length} plans before hitting an error on "${plan.name}". Stripe said: ${stripeErrorLine(err)}` };
+    }
+  }
+
+  revalidatePath("/super-admin/plans");
+  return { message: `Synced ${synced} active plan${synced === 1 ? "" : "s"} to Stripe.` };
+}
+
+export async function updatePlatformSettings(formData: FormData) {
+  await requireSuperAdminSession();
+  const toggles = ["certificates_enabled", "charity_discount_enabled", "maintenance_mode", "new_signups_enabled"];
+  for (const key of toggles) {
+    await PlatformSettings.set(key, formData.get(key) === "on" ? "true" : "false");
+  }
+  const platformName = String(formData.get("platform_name") || "").trim();
+  if (platformName) await PlatformSettings.set("platform_name", platformName);
+  revalidatePath("/super-admin/settings");
+}
+
+// ---- Complimentary (free) academies — Super Admin only ----
+// Grants free access to one academy, for a period (until the end of a chosen date) or with no end, and lets it be changed or
+// revoked at any time. Nothing at Stripe is touched; when a dated period ends the academy falls back to its normal state.
+export async function grantComplimentary(formData: FormData) {
+  await requireSuperAdminSession();
+  const id = String(formData.get("academyId") || "");
+  const academy = await Academies.byId(id);
+  if (!academy || academy.is_deleted) return;
+  const mode = String(formData.get("mode") || "unlimited");
+  let until: string | null = null;
+  if (mode === "until") {
+    const parsed = parseComplimentaryEnd(String(formData.get("until") || ""));
+    if (!parsed.ok) redirect(saHref(`/super-admin/academies?complimentaryError=${encodeURIComponent(parsed.error)}`));
+    until = parsed.iso;
+  }
+  await Academies.grantComplimentary(id, until, cleanNote(String(formData.get("note") || "")));
+  revalidatePath("/super-admin");
+  revalidatePath("/super-admin/academies");
+  revalidatePath(`/a/${academy.slug}`, "layout");
+}
+
+export async function revokeComplimentary(formData: FormData) {
+  await requireSuperAdminSession();
+  const id = String(formData.get("academyId") || "");
+  const academy = await Academies.byId(id);
+  if (!academy) return;
+  await Academies.revokeComplimentary(id);
+  revalidatePath("/super-admin");
+  revalidatePath("/super-admin/academies");
+  revalidatePath(`/a/${academy.slug}`, "layout");
+}
