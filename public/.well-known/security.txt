@@ -1,0 +1,4 @@
+Contact: mailto:academyadmin@essesystems.co.uk
+Expires: 2027-11-27T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://skillacademies.ai/.well-known/security.txt
